@@ -1,6 +1,6 @@
 # SoftDesk Support
 
-API RESTful Django permettant à des utilisateurs de créer des projets, d'y ajouter des contributeurs, de déclarer des problèmes (issues) et de les commenter. L'authentification est gérée par JSON Web Token (JWT). L'application respecte les règles RGPD et applique des permissions par auteur et par contributeur.
+API RESTful Django permettant à des utilisateurs de créer des projets, d'y ajouter des contributeurs, de déclarer des problèmes (issues) et de les commenter. L'authentification est gérée par JSON Web Token (JWT). Les routes respectent la hiérarchie des modèles `Projects → Issues → Comments` et appliquent des permissions par auteur, par contributeur et par administrateur.
 
 Projet réalisé dans le cadre de la formation Développeur d'Application Python sur OpenClassrooms.
 
@@ -10,7 +10,7 @@ Projet réalisé dans le cadre de la formation Développeur d'Application Python
 * Projets : création, modification et suppression. L'auteur d'un projet en devient automatiquement contributeur.
 * Issues : création par les contributeurs du projet, avec priorité (LOW, MEDIUM, HIGH), balise (BUG, FEATURE, TASK) et statut (To Do, In Progress, Finished).
 * Commentaires : création par les contributeurs du projet, identifiés par UUID.
-* Permissions : seuls les contributeurs d'un projet peuvent voir ses ressources, seul l'auteur peut modifier ou supprimer.
+* Permissions : seuls les contributeurs d'un projet peuvent voir ses ressources, seul l'auteur peut modifier ou supprimer, un administrateur peut consulter les projets d'un utilisateur.
 * Pagination des listes et optimisation des requêtes SQL.
 
 ## Technologies
@@ -19,6 +19,7 @@ Projet réalisé dans le cadre de la formation Développeur d'Application Python
 * Django 6.0
 * Django REST Framework
 * djangorestframework-simplejwt
+* drf-nested-routers
 * SQLite
 
 ## Installation et exécution
@@ -51,18 +52,52 @@ L'API est accessible à l'adresse : http://127.0.0.1:8000/
 
 ## Endpoints
 
+Les routes respectent la hiérarchie des ressources : un commentaire appartient à une issue qui appartient à un projet.
+
+### Authentification
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| POST | /api/login/ | Connexion (obtention du token JWT) |
+| POST | /api/token/refresh/ | Rafraîchir l'access token |
+
+### Utilisateurs
+
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
 | POST | /api/users/ | Inscription |
-| POST | /api/login/ | Connexion (obtention du token JWT) |
-| POST | /api/token/refresh/ | Rafraîchir l'access token |
+| GET | /api/users/{id}/ | Voir son profil |
+| PUT | /api/users/{id}/ | Modifier son profil |
+| DELETE | /api/users/{id}/ | Supprimer son compte (droit à l'oubli RGPD) |
+| GET | /api/users/{id}/projects/ | Lister les projets d'un utilisateur (admin ou utilisateur lui-même) |
+
+### Projets
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
 | GET, POST | /api/projects/ | Lister ou créer un projet |
 | GET, PUT, DELETE | /api/projects/{id}/ | Détail, modifier ou supprimer un projet |
-| GET, POST | /api/contributors/ | Lister ou ajouter un contributeur |
-| GET, POST | /api/issues/ | Lister ou créer une issue |
-| GET, PUT, DELETE | /api/issues/{id}/ | Détail, modifier ou supprimer une issue |
-| GET, POST | /api/comments/ | Lister ou créer un commentaire |
-| GET, PUT, DELETE | /api/comments/{id}/ | Détail, modifier ou supprimer un commentaire |
+
+### Contributeurs (imbriqués sous un projet)
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET, POST | /api/projects/{id}/users/ | Lister ou ajouter un contributeur |
+| DELETE | /api/projects/{id}/users/{id}/ | Retirer un contributeur |
+
+### Issues (imbriquées sous un projet)
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET, POST | /api/projects/{id}/issues/ | Lister ou créer une issue |
+| GET, PUT, DELETE | /api/projects/{id}/issues/{id}/ | Détail, modifier ou supprimer une issue |
+
+### Commentaires (imbriqués sous une issue)
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET, POST | /api/projects/{id}/issues/{id}/comments/ | Lister ou créer un commentaire |
+| GET, PUT, DELETE | /api/projects/{id}/issues/{id}/comments/{uuid}/ | Détail, modifier ou supprimer un commentaire |
 
 Pour les endpoints protégés, ajouter le header `Authorization: Bearer <access_token>`.
 
@@ -74,8 +109,10 @@ Le projet a été développé en suivant les six étapes du cahier des charges :
 2. **Modèle User.** Création d'un modèle utilisateur personnalisé incluant les champs RGPD (date de naissance, `can_be_contacted`, `can_data_be_shared`) et la validation de l'âge à l'inscription.
 3. **Modèles Project et Contributor.** Création des projets (back-end, front-end, iOS, Android) et du système de contributeurs liant utilisateurs et projets.
 4. **Modèles Issue et Comment.** Ajout des issues (priorité, balise, statut) et des commentaires identifiés par UUID.
-5. **Permissions.** Authentification JWT, permission `IsAuthorOrReadOnly` (seul l'auteur peut modifier ou supprimer), permission `IsProjectContributor` (accès aux ressources d'un projet réservé à ses contributeurs), filtrage des querysets par utilisateur. Activation de Dependabot sur le dépôt GitHub.
+5. **Permissions.** Authentification JWT, permission `IsAuthorOrReadOnly` (seul l'auteur peut modifier ou supprimer), permission `IsProjectContributor` (accès aux ressources d'un projet réservé à ses contributeurs), permission `IsAdminOrSelf` (accès aux projets d'un utilisateur réservé à un admin ou à l'utilisateur lui-même), filtrage des querysets par utilisateur. Activation de Dependabot sur le dépôt GitHub.
 6. **Green code et optimisation.** Mise en place de la pagination (10 éléments par page) et utilisation de `select_related` et `prefetch_related` pour limiter le nombre de requêtes SQL.
+
+L'architecture des URLs suit la hiérarchie des modèles imposée par REST : les routes imbriquées sont gérées par `drf-nested-routers`.
 
 ## Tests
 
@@ -83,7 +120,7 @@ Une suite de tests automatisés couvre les permissions, la création des ressour
 
 Pour exécuter les tests :
 
-    python manage.py test
+        python manage.py test
 
 ## Auteur
 

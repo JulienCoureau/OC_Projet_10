@@ -18,23 +18,51 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
+from rest_framework_nested import routers as nested_routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from users.views import UserViewSet
-from projects.views import ProjectViewSet, ContributorViewSet
-from users.views import UserViewSet
-from projects.views import ProjectViewSet, ContributorViewSet, IssueViewSet, CommentViewSet
 
+from users.views import UserViewSet
+from projects.views import (
+    ProjectViewSet,
+    ContributorViewSet,
+    IssueViewSet,
+    CommentViewSet,
+    UserProjectsViewset,
+)
+
+# Router racine pour les ressources de haut niveau
 router = routers.SimpleRouter()
 router.register("users", UserViewSet, basename="users")
 router.register("projects", ProjectViewSet, basename="projects")
-router.register("contributors", ContributorViewSet, basename="contributors")
-router.register("issues", IssueViewSet, basename= "issues")
-router.register("comments", CommentViewSet, basename="comments")
+
+# Routr imbriqué sous /user/{ID}/
+users_router = nested_routers.NestedSimpleRouter(
+    router, r"users", lookup="user"
+)
+users_router.register(
+    r"projects", UserProjectsViewset, basename="user-projects" 
+)
+
+# Router imbriqué sous /projects/{ID}/
+projects_router = nested_routers.NestedSimpleRouter(
+    router, r"projects", lookup="project"
+)
+projects_router.register(r"users", ContributorViewSet, basename="project-users")
+projects_router.register(r"issues", IssueViewSet, basename="project-issues")
+
+# Router imbriqué sous /projects/{ID}/issues/{ID}/
+issues_router = nested_routers.NestedSimpleRouter(
+    projects_router, r"issues", lookup="issue"
+)
+issues_router.register(r"comments", CommentViewSet, basename="issue-comments")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include(router.urls)),
+    path("api/", include (users_router.urls)),
+    path("api/", include(projects_router.urls)),
+    path("api/", include(issues_router.urls)),
     path("api/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api-auth/", include("rest_framework.urls")),
 ]
