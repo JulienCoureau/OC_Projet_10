@@ -47,7 +47,7 @@ users_router.register(
 projects_router = nested_routers.NestedSimpleRouter(
     router, r"projects", lookup="project"
 )
-projects_router.register(r"users", ContributorViewSet, basename="project-users")
+projects_router.register(r"contributors", ContributorViewSet, basename="project-users")
 projects_router.register(r"issues", IssueViewSet, basename="project-issues")
 
 # Router imbriqué sous /projects/{ID}/issues/{ID}/
